@@ -1,67 +1,53 @@
 # @author       : Bingyu Xin   
 # @Institute    : CS@Rutgers
 
-from torch.fft import fft2, ifft2
-import torch
-import math
-import numpy as np
+import os
 import time
-from numpy.fft import ifftshift
+import torch
+import ismrmrd
+import ismrmrd.xsd
+import numpy as np
 from numpy.lib.stride_tricks import as_strided
+from torch.fft import fft2, ifft2
 
-def RF(x_rec, mask, norm='ortho'):
-    '''
-    RF means R*F(input), F is fft, R is applying mask;
-    return the masked k-space of x_rec,
-    '''
-    x_rec = x_rec.permute(0, 2, 3, 1)
-    mask = mask.permute(0, 2, 3, 1)
-    k_rec = torch.fft.fft2(torch.view_as_complex(x_rec.contiguous()), norm=norm)
-    k_rec = torch.view_as_real(k_rec)
-    k_rec *= mask
-    k_rec = k_rec.permute(0, 3, 1, 2)
-    return k_rec
+
+def crop_img(data, shape):
+    w_from = (data.shape[0] - shape[0]) // 2
+    h_from = (data.shape[1] - shape[1]) // 2
+    w_to = w_from + shape[0]
+    h_to = h_from + shape[1]
+    return data[w_from:w_to, h_from:h_to, ...]
+
 
 def undersample(image, mask, norm='ortho'):
     assert image.shape == mask.shape
 
     k = fft2(image, norm=norm)
     k_und = mask * k
-    # import matplotlib.pyplot as plt
-    # print(k_und.shape)
-    # plt.imshow(np.log10(np.abs(k_und)+1e-30))
-    # plt.savefig('debug.png')
     x_und = ifft2(k_und, norm=norm)
 
     return x_und, k_und, k
 
-def revert_scale(im_tensor, a=2., b=-1.):
-    '''
-    param: im_tensor : [B, 2, W, H]
-    '''
-    b = b * torch.ones_like(im_tensor)
-    im = (im_tensor - b) / a
 
-    return im
-def gray2rgb(x):
-    x = x.unsqueeze(1)
-    return torch.cat([x,x,x],1)
-
-def output2complex(im_tensor, revert = False):
+def output2complex(im_tensor):
     '''
     param: im_tensor : [B, 2, W, H]
     return : [B,W,H] magnitude of complex value
     '''
     ############## revert each channel to [0,1.] range
-    if revert:
-        im_tensor = revert_scale(im_tensor)
-    # 2 channel to complex
     im_tensor = torch.view_as_complex(im_tensor.permute(0, 2, 3, 1).contiguous()).abs()
 
     return im_tensor
 
+
 def normal_pdf(length, sensitivity):
     return np.exp(-sensitivity * (np.arange(length) - length / 2) ** 2)
+
+
+'''
+modified from https://github.com/js3611/Deep-MRI-Reconstruction/blob/master/utils/compressed_sensing.py
+'''
+
 
 def cartesian_mask(shape: object, acc: object, centred: object = False,
                    sample_random=True) -> object:
@@ -73,10 +59,10 @@ def cartesian_mask(shape: object, acc: object, centred: object = False,
     sample_n: num of lines in low frequency to be sampled
 
     """
-    shape = shape[:-2] + (shape[-1],shape[-2])
-    if acc==5:
+    shape = shape[:-2] + (shape[-1], shape[-2])
+    if acc == 5:
         center_fraction = 0.08
-    elif acc==10:
+    elif acc == 10:
         center_fraction = 0.04
 
     N, Nx, Ny = int(np.prod(shape[:-2])), shape[-2], shape[-1]
@@ -89,15 +75,16 @@ def cartesian_mask(shape: object, acc: object, centred: object = False,
     pdf_x += lmda * 1. / Nx
 
     if sample_n:
-        pdf_x[Nx // 2 - sample_n // 2:Nx // 2 + sample_n - sample_n // 2] = 0  # sample_n -
+        pdf_x[Nx // 2 - sample_n // 2:Nx // 2 + sample_n - sample_n // 2] = 0
         pdf_x /= np.sum(pdf_x)
         n_lines -= sample_n
 
     mask = np.zeros((N, Nx))
-    ##############################################
+    ##################### modifications to enable random mask and fixed mask #########################
     # set fixed seed
     if not sample_random:
         np.random.seed(233)
+    ## set sampling lines
     for i in range(N):
         idx = np.random.choice(Nx, n_lines, False, pdf_x)
         mask[i, idx] = 1
@@ -105,7 +92,7 @@ def cartesian_mask(shape: object, acc: object, centred: object = False,
     if not sample_random:
         t = 1000 * time.time()  # current time in milliseconds
         np.random.seed(int(t) % 2 ** 32)
-    #####################################3
+    ##################################################################################################
 
     if sample_n:
         mask[:, Nx // 2 - sample_n // 2:Nx // 2 + sample_n - sample_n // 2] = 1
@@ -116,18 +103,14 @@ def cartesian_mask(shape: object, acc: object, centred: object = False,
     mask = mask.reshape(shape)
 
     if not centred:
-        mask = ifftshift(mask, axes=(-1, -2))
+        mask = np.fft.ifftshift(mask, axes=(-1, -2))
 
-    return mask.transpose((-1,-2))
+    return mask.transpose((-1, -2))
+
 
 '''
 borrowed from  https://github.com/MRIOSU/OCMR/blob/master/Python/read_ocmr.py
 '''
-
-import os
-import ismrmrd
-import ismrmrd.xsd
-import numpy as np
 
 
 def read_ocmr(filename):
@@ -211,7 +194,7 @@ def read_ocmr(filename):
             continue
         else:
             firstacq = acqnum
-            print("Imaging acquisition starts acq ", acqnum)
+            # print("Imaging acquisition starts acq ", acqnum)
             break
 
     # assymetry echo
@@ -240,9 +223,11 @@ def read_ocmr(filename):
 
     return all_data, param
 
+
 if __name__ == '__main__':
-    a = cartesian_mask((192,160), acc=5, centred = False, sample_random=False)
     import matplotlib.pyplot as plt
+
+    a = cartesian_mask((192, 160), acc=5, centred=False, sample_random=False)
     plt.imshow(a)
     plt.show()
-    print(a.shape,a.dtype)
+    print(a.shape, a.dtype)

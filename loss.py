@@ -1,160 +1,320 @@
 # @author       : Bingyu Xin   
 # @Institute    : CS@Rutgers
 
+## MS-SSIM loss is taken from https://github.com/VainF/pytorch-msssim/blob/master/pytorch_msssim/ssim.py
+
+import warnings
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from utils import RF
-from pytorch_msssim import MS_SSIM
-from utils import output2complex
-def total_variant(images):
-    '''
-    :param images:  [B,C,W,H]
-    :return: total_variant
-    '''
-    pixel_dif1 = images[:, :, 1:, :] - images[:, :, :-1, :]
-    pixel_dif2 = images[:, :, :, 1:] - images[:, :, :, :-1]
-
-    tot_var = torch.abs(pixel_dif1).sum([1, 2, 3]) + torch.abs(pixel_dif2).sum([1, 2, 3])
-
-    return tot_var
 
 
+def _fspecial_gauss_1d(size, sigma):
+    r"""Create 1-D gauss kernel
+    Args:
+        size (int): the size of gauss kernel
+        sigma (float): sigma of normal distribution
 
-def build_loss(dis_real, dis_fake):
-    '''
-    calculate WGAN loss
-    '''
-    d_loss = torch.mean(dis_fake - dis_real)
-    g_loss = -torch.mean(dis_fake)
-    return g_loss, d_loss
+    Returns:
+        torch.Tensor: 1D kernel (1 x 1 x size)
+    """
+    coords = torch.arange(size).to(dtype=torch.float)
+    coords -= size // 2
 
+    g = torch.exp(-(coords ** 2) / (2 * sigma ** 2))
+    g /= g.sum()
 
-def cal_loss(S01, S01_k_un, S02, S02_k_un, mask, T1, T2, S1_dis_real, S1_dis_fake,
-             T1_dis_fake, S2_dis_real, S2_dis_fake,
-             T2_dis_fake, cal_G=True):
-    '''
-    TODO: input arguments are too much, and some calculation is redundant
-    '''
-    comp_loss = CompoundLoss() ########################
-
-    G_loss_Aa, D_loss_Aa = build_loss(S1_dis_real, T1_dis_fake)
-    G_loss_Bb, D_loss_Bb = build_loss(S2_dis_real, T2_dis_fake)
-
-    G_loss_Ab, D_loss_Ab = build_loss(S1_dis_real, T2_dis_fake)
-    G_loss_Ba, D_loss_Ba = build_loss(S2_dis_real, T1_dis_fake)
+    return g.unsqueeze(0).unsqueeze(0)
 
 
-    if cal_G:
+def gaussian_filter(input, win):
+    r""" Blur input with 1-D kernel
+    Args:
+        input (torch.Tensor): a batch of tensors to be blurred
+        window (torch.Tensor): 1-D gauss kernel
 
-        recon_img_Aa = comp_loss(T1,S01) #torch.mean(torch.abs((S01) - (T1)))
-        recon_img_Bb = comp_loss(T2,S02) #torch.mean(torch.abs((S02) - (T2)))
-        smoothness_Aa = torch.mean(total_variant(T1))
-        smoothness_Bb = torch.mean(total_variant(T2))
-
-        ALPHA = 1e+1
-        GAMMA = 1e-0
-        DELTA = 1e-4
-        RATES = torch.count_nonzero(torch.ones_like(mask)) / 2. / torch.count_nonzero(mask)
-        GAMMA = RATES
-
-        g_loss = \
-            (G_loss_Aa + G_loss_Bb + G_loss_Ab + G_loss_Ba) + \
-            (recon_img_Aa + recon_img_Bb) * 1.00 * ALPHA * RATES + \
-            ( smoothness_Aa + smoothness_Bb) * DELTA  # for freq loss, when d5c5 backbone, factor is 1e+3; origin is 1. although
-        return g_loss, [G_loss_Aa, recon_img_Aa, smoothness_Aa]
+    Returns:
+        torch.Tensor: blurred tensors
+    """
+    assert all([ws == 1 for ws in win.shape[1:-1]]), win.shape
+    if len(input.shape) == 4:
+        conv = F.conv2d
+    elif len(input.shape) == 5:
+        conv = F.conv3d
     else:
+        raise NotImplementedError(input.shape)
 
-        d_loss = \
-            D_loss_Aa + D_loss_Bb + D_loss_Ab + D_loss_Ba
+    C = input.shape[1]
+    out = input
+    for i, s in enumerate(input.shape[2:]):
+        if s >= win.shape[-1]:
+            out = conv(out, weight=win.transpose(2 + i, -1), stride=1, padding=0, groups=C)
+        else:
+            warnings.warn(
+                f"Skipping Gaussian Smoothing at dimension 2+{i} for input: {input.shape} and win size: {win.shape[-1]}"
+            )
 
-        return d_loss, [ D_loss_Aa, D_loss_Ab]
-
-# def cal_loss(S01, S01_k_un, S02, S02_k_un, mask, Sp1, S1, Tp1, T1, Sp2, S2, Tp2, T2, S1_dis_real, S1_dis_fake,
-#              T1_dis_fake, S2_dis_real, S2_dis_fake,
-#              T2_dis_fake, cal_G=True):
-#     '''
-#     TODO: input arguments are too much, and some calculation is redundant
-#     '''
-#     # comp_loss = CompoundLoss() ########################
-#     G_loss_Aa, D_loss_Aa = build_loss(S1_dis_real, T1_dis_fake)
-#
-#     if cal_G:
-#         recon_frq_Aa = torch.mean(torch.abs(S01_k_un - RF(Tp1, mask)))
-#         recon_img_Aa = torch.mean(torch.abs((S01) - (T1))) #comp_loss(output2complex(S02),output2complex(T2)) #
-#         smoothness_Aa = torch.mean(total_variant(T1))
-#
-#         ALPHA = 1e+1
-#         GAMMA = 1e-0
-#         DELTA = 1e-4
-#         RATES = torch.count_nonzero(torch.ones_like(mask)) / 2. / torch.count_nonzero(mask)
-#         GAMMA = RATES
-#
-#         g_loss = \
-#             (G_loss_Aa)+ \
-#             (recon_img_Aa) * 1e+2 * ALPHA * RATES \
-#             + smoothness_Aa * DELTA + recon_frq_Aa  * 1.00 * GAMMA * RATES
-#
-#         return g_loss, [G_loss_Aa, recon_img_Aa]
-#     else:
-#         d_loss =  D_loss_Aa
-#         return d_loss, [ D_loss_Aa]
+    return out
 
 
-class SSIMLoss(nn.Module):
+def _ssim(X, Y, data_range, win, size_average=True, K=(0.01, 0.03)):
+    r""" Calculate ssim index for X and Y
+
+    Args:
+        X (torch.Tensor): images
+        Y (torch.Tensor): images
+        win (torch.Tensor): 1-D gauss kernel
+        data_range (float or int, optional): value range of input images. (usually 1.0 or 255)
+        size_average (bool, optional): if size_average=True, ssim of all images will be averaged as a scalar
+
+    Returns:
+        torch.Tensor: ssim results.
     """
-    SSIM loss module.
+    K1, K2 = K
+    # batch, channel, [depth,] height, width = X.shape
+    compensation = 1.0
 
-    From: https://github.com/facebookresearch/fastMRI/blob/master/fastmri/losses.py
+    C1 = (K1 * data_range) ** 2
+    C2 = (K2 * data_range) ** 2
+
+    win = win.to(X.device, dtype=X.dtype)
+
+    mu1 = gaussian_filter(X, win)
+    mu2 = gaussian_filter(Y, win)
+
+    mu1_sq = mu1.pow(2)
+    mu2_sq = mu2.pow(2)
+    mu1_mu2 = mu1 * mu2
+
+    sigma1_sq = compensation * (gaussian_filter(X * X, win) - mu1_sq)
+    sigma2_sq = compensation * (gaussian_filter(Y * Y, win) - mu2_sq)
+    sigma12 = compensation * (gaussian_filter(X * Y, win) - mu1_mu2)
+
+    cs_map = (2 * sigma12 + C2) / (sigma1_sq + sigma2_sq + C2)  # set alpha=beta=gamma=1
+    ssim_map = ((2 * mu1_mu2 + C1) / (mu1_sq + mu2_sq + C1)) * cs_map
+
+    ssim_per_channel = torch.flatten(ssim_map, 2).mean(-1)
+    cs = torch.flatten(cs_map, 2).mean(-1)
+    return ssim_per_channel, cs
+
+
+def ssim(
+        X,
+        Y,
+        data_range=255,
+        size_average=True,
+        win_size=11,
+        win_sigma=1.5,
+        win=None,
+        K=(0.01, 0.03),
+        nonnegative_ssim=False,
+):
+    r""" interface of ssim
+    Args:
+        X (torch.Tensor): a batch of images, (N,C,H,W)
+        Y (torch.Tensor): a batch of images, (N,C,H,W)
+        data_range (float or int, optional): value range of input images. (usually 1.0 or 255)
+        size_average (bool, optional): if size_average=True, ssim of all images will be averaged as a scalar
+        win_size: (int, optional): the size of gauss kernel
+        win_sigma: (float, optional): sigma of normal distribution
+        win (torch.Tensor, optional): 1-D gauss kernel. if None, a new kernel will be created according to win_size and win_sigma
+        K (list or tuple, optional): scalar constants (K1, K2). Try a larger K2 constant (e.g. 0.4) if you get a negative or NaN results.
+        nonnegative_ssim (bool, optional): force the ssim response to be nonnegative with relu
+
+    Returns:
+        torch.Tensor: ssim results
     """
+    if not X.shape == Y.shape:
+        raise ValueError("Input images should have the same dimensions.")
 
-    def __init__(self, win_size=7, k1=0.01, k2=0.03):
-        """
+    for d in range(len(X.shape) - 1, 1, -1):
+        X = X.squeeze(dim=d)
+        Y = Y.squeeze(dim=d)
+
+    if len(X.shape) not in (4, 5):
+        raise ValueError(f"Input images should be 4-d or 5-d tensors, but got {X.shape}")
+
+    if not X.type() == Y.type():
+        raise ValueError("Input images should have the same dtype.")
+
+    if win is not None:  # set win_size
+        win_size = win.shape[-1]
+
+    if not (win_size % 2 == 1):
+        raise ValueError("Window size should be odd.")
+
+    if win is None:
+        win = _fspecial_gauss_1d(win_size, win_sigma)
+        win = win.repeat([X.shape[1]] + [1] * (len(X.shape) - 1))
+
+    ssim_per_channel, cs = _ssim(X, Y, data_range=data_range, win=win, size_average=False, K=K)
+    if nonnegative_ssim:
+        ssim_per_channel = torch.relu(ssim_per_channel)
+
+    if size_average:
+        return ssim_per_channel.mean()
+    else:
+        return ssim_per_channel.mean(1)
+
+
+def ms_ssim(
+        X, Y, data_range=255, size_average=True, win_size=11, win_sigma=1.5, win=None, weights=None, K=(0.01, 0.03)
+):
+    r""" interface of ms-ssim
+    Args:
+        X (torch.Tensor): a batch of images, (N,C,[T,]H,W)
+        Y (torch.Tensor): a batch of images, (N,C,[T,]H,W)
+        data_range (float or int, optional): value range of input images. (usually 1.0 or 255)
+        size_average (bool, optional): if size_average=True, ssim of all images will be averaged as a scalar
+        win_size: (int, optional): the size of gauss kernel
+        win_sigma: (float, optional): sigma of normal distribution
+        win (torch.Tensor, optional): 1-D gauss kernel. if None, a new kernel will be created according to win_size and win_sigma
+        weights (list, optional): weights for different levels
+        K (list or tuple, optional): scalar constants (K1, K2). Try a larger K2 constant (e.g. 0.4) if you get a negative or NaN results.
+    Returns:
+        torch.Tensor: ms-ssim results
+    """
+    if not X.shape == Y.shape:
+        raise ValueError("Input images should have the same dimensions.")
+
+    for d in range(len(X.shape) - 1, 1, -1):
+        X = X.squeeze(dim=d)
+        Y = Y.squeeze(dim=d)
+
+    if not X.type() == Y.type():
+        raise ValueError("Input images should have the same dtype.")
+
+    if len(X.shape) == 4:
+        avg_pool = F.avg_pool2d
+    elif len(X.shape) == 5:
+        avg_pool = F.avg_pool3d
+    else:
+        raise ValueError(f"Input images should be 4-d or 5-d tensors, but got {X.shape}")
+
+    if win is not None:  # set win_size
+        win_size = win.shape[-1]
+
+    if not (win_size % 2 == 1):
+        raise ValueError("Window size should be odd.")
+
+    smaller_side = min(X.shape[-2:])
+    assert smaller_side > (win_size - 1) * (
+            2 ** 4
+    ), "Image size should be larger than %d due to the 4 downsamplings in ms-ssim" % ((win_size - 1) * (2 ** 4))
+
+    if weights is None:
+        weights = [0.0448, 0.2856, 0.3001, 0.2363, 0.1333]
+    weights = torch.FloatTensor(weights).to(X.device, dtype=X.dtype)
+
+    if win is None:
+        win = _fspecial_gauss_1d(win_size, win_sigma)
+        win = win.repeat([X.shape[1]] + [1] * (len(X.shape) - 1))
+
+    levels = weights.shape[0]
+    mcs = []
+    for i in range(levels):
+        ssim_per_channel, cs = _ssim(X, Y, win=win, data_range=data_range, size_average=False, K=K)
+
+        if i < levels - 1:
+            mcs.append(torch.relu(cs))
+            padding = [s % 2 for s in X.shape[2:]]
+            X = avg_pool(X, kernel_size=2, padding=padding)
+            Y = avg_pool(Y, kernel_size=2, padding=padding)
+
+    ssim_per_channel = torch.relu(ssim_per_channel)  # (batch, channel)
+    mcs_and_ssim = torch.stack(mcs + [ssim_per_channel], dim=0)  # (level, batch, channel)
+    ms_ssim_val = torch.prod(mcs_and_ssim ** weights.view(-1, 1, 1), dim=0)
+
+    if size_average:
+        return ms_ssim_val.mean()
+    else:
+        return ms_ssim_val.mean(1)
+
+
+class SSIM(torch.nn.Module):
+    def __init__(
+            self,
+            data_range=255,
+            size_average=True,
+            win_size=11,
+            win_sigma=1.5,
+            channel=3,
+            spatial_dims=2,
+            K=(0.01, 0.03),
+            nonnegative_ssim=False,
+    ):
+        r""" class for ssim
         Args:
-            win_size (int, default=7): Window size for SSIM calculation.
-            k1 (float, default=0.1): k1 parameter for SSIM calculation.
-            k2 (float, default=0.03): k2 parameter for SSIM calculation.
+            data_range (float or int, optional): value range of input images. (usually 1.0 or 255)
+            size_average (bool, optional): if size_average=True, ssim of all images will be averaged as a scalar
+            win_size: (int, optional): the size of gauss kernel
+            win_sigma: (float, optional): sigma of normal distribution
+            channel (int, optional): input channels (default: 3)
+            K (list or tuple, optional): scalar constants (K1, K2). Try a larger K2 constant (e.g. 0.4) if you get a negative or NaN results.
+            nonnegative_ssim (bool, optional): force the ssim response to be nonnegative with relu.
         """
-        super().__init__()
+
+        super(SSIM, self).__init__()
         self.win_size = win_size
-        self.k1, self.k2 = k1, k2
-        self.register_buffer("w", torch.ones(1, 1, win_size, win_size) / win_size ** 2)
-        NP = win_size ** 2
-        self.cov_norm = NP / (NP - 1)
+        self.win = _fspecial_gauss_1d(win_size, win_sigma).repeat([channel, 1] + [1] * spatial_dims)
+        self.size_average = size_average
+        self.data_range = data_range
+        self.K = K
+        self.nonnegative_ssim = nonnegative_ssim
 
     def forward(self, X, Y):
-        '''
-
-        :param X:  pred
-        :param Y:  gt
-        :return:
-        '''
-        X = X.unsqueeze(1)
-        Y = Y.unsqueeze(1)
-        # print(Y.device)
-        data_range =  torch.Tensor([Y.max()]).to(Y.device)
-        # print(data_range.shape,data_range)
-        data_range = data_range[:, None, None, None]
-        C1 = (self.k1 * data_range) ** 2
-        C2 = (self.k2 * data_range) ** 2
-        ux = F.conv2d(X, self.w)
-        uy = F.conv2d(Y, self.w)
-        uxx = F.conv2d(X * X, self.w)
-        uyy = F.conv2d(Y * Y, self.w)
-        uxy = F.conv2d(X * Y, self.w)
-        vx = self.cov_norm * (uxx - ux * ux)
-        vy = self.cov_norm * (uyy - uy * uy)
-        vxy = self.cov_norm * (uxy - ux * uy)
-        A1, A2, B1, B2 = (
-            2 * ux * uy + C1,
-            2 * vxy + C2,
-            ux ** 2 + uy ** 2 + C1,
-            vx + vy + C2,
+        return ssim(
+            X,
+            Y,
+            data_range=self.data_range,
+            size_average=self.size_average,
+            win=self.win,
+            K=self.K,
+            nonnegative_ssim=self.nonnegative_ssim,
         )
-        D = B1 * B2
-        S = (A1 * A2) / D
 
-        return 1 - S.mean()
+
+class MS_SSIM(torch.nn.Module):
+    def __init__(
+            self,
+            data_range=255,
+            size_average=True,
+            win_size=11,
+            win_sigma=1.5,
+            channel=3,
+            spatial_dims=2,
+            weights=None,
+            K=(0.01, 0.03),
+    ):
+        r""" class for ms-ssim
+        Args:
+            data_range (float or int, optional): value range of input images. (usually 1.0 or 255)
+            size_average (bool, optional): if size_average=True, ssim of all images will be averaged as a scalar
+            win_size: (int, optional): the size of gauss kernel
+            win_sigma: (float, optional): sigma of normal distribution
+            channel (int, optional): input channels (default: 3)
+            weights (list, optional): weights for different levels
+            K (list or tuple, optional): scalar constants (K1, K2). Try a larger K2 constant (e.g. 0.4) if you get a negative or NaN results.
+        """
+
+        super(MS_SSIM, self).__init__()
+        self.win_size = win_size
+        self.win = _fspecial_gauss_1d(win_size, win_sigma).repeat([channel, 1] + [1] * spatial_dims)
+        self.size_average = size_average
+        self.data_range = data_range
+        self.weights = weights
+        self.K = K
+
+    def forward(self, X, Y):
+        return ms_ssim(
+            X,
+            Y,
+            data_range=self.data_range,
+            size_average=self.size_average,
+            win=self.win,
+            weights=self.weights,
+            K=self.K,
+        )
 
 
 class CompoundLoss(nn.Module):
@@ -162,53 +322,10 @@ class CompoundLoss(nn.Module):
     def __init__(self):
         super().__init__()
         self.l1loss = nn.L1Loss()
-        # self.ssimloss = SSIMLoss().cuda()
-        self.msssim = MS_SSIM(win_size=7, data_range=1., size_average=True, channel=1,K=(0.01, 0.03))
+        self.msssim = MS_SSIM(win_size=7, data_range=1., size_average=True, channel=1, K=(0.01, 0.03))
         self.alpha = 0.84
 
     def forward(self, pred, target):
-        # pred_abs = pred_abs.unsqueeze(1)
-        # target_abs = target_abs.unsqueeze(1)
-        # data_range = target_abs.max() #
         l1_loss = self.l1loss(pred, target)
-        ssim_loss = 1 - self.msssim(pred.unsqueeze(1), target.unsqueeze(1))#self.ssimloss(pred.abs(), target.abs())
-        return (1-self.alpha)*l1_loss + self.alpha * ssim_loss
-
-def gradient_penalty( y, x):
-    """Compute gradient penalty: (L2_norm(dy/dx) - 1)**2."""
-    weight = torch.ones(y.size()).cuda()
-    dydx = torch.autograd.grad(outputs=y,
-                               inputs=x,
-                               grad_outputs=weight,
-                               retain_graph=True,
-                               create_graph=True,
-                               only_inputs=True)[0]
-
-    dydx = dydx.view(dydx.size(0), -1)
-    dydx_l2norm = torch.sqrt(torch.sum(dydx**2, dim=1))
-    return torch.mean((dydx_l2norm-1)**2)
-
-
-def bayeGen_loss(out_mean, out_1alpha, out_beta, target):
-    alpha_eps, beta_eps = 1e-5, 1e-1
-    out_1alpha = out_1alpha + alpha_eps
-    out_beta = out_beta +beta_eps
-    factor = out_1alpha
-    resi = torch.abs(out_mean - target)
-    #     resi = (torch.log((resi*factor).clamp(min=1e-4, max=5))*out_beta).clamp(min=-1e-4, max=5)
-    resi = (resi * factor * out_beta).clamp(min=1e-6, max=50)
-    log_1alpha = torch.log(out_1alpha)
-    log_beta = torch.log(out_beta)
-    lgamma_beta = torch.lgamma(torch.pow(out_beta, -1))
-
-    if torch.sum(log_1alpha != log_1alpha) > 0:
-        print('log_1alpha has nan')
-        print(lgamma_beta.min(), lgamma_beta.max(), log_beta.min(), log_beta.max())
-    if torch.sum(lgamma_beta != lgamma_beta) > 0:
-        print('lgamma_beta has nan')
-    if torch.sum(log_beta != log_beta) > 0:
-        print('log_beta has nan')
-
-    l = resi - log_1alpha + lgamma_beta - log_beta
-    l = torch.mean(l)
-    return l
+        ssim_loss = 1 - self.msssim(pred.unsqueeze(1), target.unsqueeze(1))
+        return (1 - self.alpha) * l1_loss + self.alpha * ssim_loss
