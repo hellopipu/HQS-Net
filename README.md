@@ -1,5 +1,5 @@
 ## HQS-Net
-pytorch implementation of the paper _Learned Half-Quadratic Splitting Network for Magnetic Resonance Image Reconstruction_
+pytorch implementation of the paper _Learned Half-Quadratic Splitting Network for Magnetic Resonance Image Reconstruction (https://arxiv.org/abs/2112.09760)
 
 ### Install
 python>=3.7.11 is required with all requirements.txt installed including pytorch>=1.10.0
@@ -38,7 +38,7 @@ sh run_sh/acc_5/test/test_hqs_5.sh
 ```
 
 ### Tensorboard
-tensorboard for checking the training and testing curves
+tensorboard for checking the curves while training
 ```shell
 tensorboard --logdir log
 ```
