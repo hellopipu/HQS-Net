@@ -1,5 +1,5 @@
 ## HQS-Net
-pytorch implementation of the paper _Learned Half-Quadratic Splitting Network for Magnetic Resonance Image Reconstruction (https://arxiv.org/abs/2112.09760)
+pytorch implementation of the paper **Learned Half-Quadratic Splitting Network for Magnetic Resonance Image Reconstruction** (https://arxiv.org/abs/2112.09760)
 
 ### Install
 python>=3.7.11 is required with all requirements.txt installed including pytorch>=1.10.0
