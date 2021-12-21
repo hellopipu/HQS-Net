@@ -19,15 +19,18 @@ class HQSNet(nn.Module):
         self.norm = norm
         self.m = buffer_size
         self.n_iter = n_iter
+        ## the initialization of mu may influence the final accuracy
         self.mu = nn.Parameter(2. * torch.ones((1, 1)))
         self.block_type = block_type
         if self.block_type == 'cnn':
             rec_blocks = []
             for i in range(self.n_iter):
-                rec_blocks.append(conv_block('hqs-net', channel_in=2 * (self.m + 1), n_convs=n_convs, n_filters=n_filters))
+                rec_blocks.append(
+                    conv_block('hqs-net', channel_in=2 * (self.m + 1), n_convs=n_convs, n_filters=n_filters))
             self.rec_blocks = nn.ModuleList(rec_blocks)
         elif self.block_type == 'unet':
-            self.rec_blocks = UNetRes(in_nc=2 * (self.m + 1), out_nc=2 * self.m , nc=[64, 128, 256, 512], nb=4, act_mode='R',
+            self.rec_blocks = UNetRes(in_nc=2 * (self.m + 1), out_nc=2 * self.m, nc=[64, 128, 256, 512], nb=4,
+                                      act_mode='R',
                                       downsample_mode="strideconv", upsample_mode="convtranspose")
 
     def _forward_operation(self, img, mask):
@@ -64,4 +67,3 @@ class HQSNet(nn.Module):
             elif self.block_type == 'unet':
                 f = f + self.rec_blocks(torch.cat([f, updated_f_1], 1))
         return f[:, 0:2]
-

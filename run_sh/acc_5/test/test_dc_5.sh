@@ -1,5 +1,5 @@
 CUDA_VISIBLE_DEVICES=0 python main.py \
---mode 'train' \
+--mode 'test' \
 --model 'dc-cnn' \
 --acc 5 \
 --batch_size 1 \

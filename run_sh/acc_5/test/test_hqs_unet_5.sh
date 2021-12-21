@@ -1,5 +1,5 @@
 CUDA_VISIBLE_DEVICES=2 python main.py \
---mode 'train' \
+--mode 'test' \
 --model 'hqs-net-unet' \
 --acc 5 \
 --batch_size 1 \

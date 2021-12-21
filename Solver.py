@@ -46,7 +46,7 @@ class Solver():
 
         self.task_name = self.model_name + '_acc_' + str(self.acc) + '_bs_' + str(self.batch_size) \
                          + '_lr_' + str(self.lr)
-
+        print('task_name: ', self.task_name)
         self.model_path = 'weight/' + self.task_name + '_' + 'best.pth'  # model load path for test and visualization
 
         ############################################ Specify network ############################################
@@ -66,7 +66,16 @@ class Solver():
     def train(self):
 
         ############################################ Specify loss ############################################
-        self.criterion = CompoundLoss()
+        ## Notice:
+        ## 0. generally, ms-ssim is slightly better than ssim
+        ## 1. we train all models with ms-ssim + l1 loss, except hqs-net-unet
+        ## 2. we train the hqs-net-unet model with ssim + l1 loss, the reason is that, we found when using ms-ssim loss,
+        ## the gradient of ms-ssim may be nan. This bug exists in both pytorch and tensoflow implementation of ms-ssim loss.
+        ## see https://github.com/tensorflow/tensorflow/issues/50400, https://github.com/VainF/pytorch-msssim/issues/12
+        if self.model_name == 'hqs-net-unet':
+            self.criterion = CompoundLoss('ssim')
+        else:
+            self.criterion = CompoundLoss('ms-ssim')
 
         ############################################ Specify optimizer ############################################
 
@@ -98,7 +107,9 @@ class Solver():
             loss_g = self._train_cnn(loader_train)
             ####################### 2. validate #######################
             if epoch % self.val_on_epochs == 0:
-                base_psnr, val_psnr, base_ssim, val_ssim = self._validate(loader_val)
+                if epoch == 0:
+                    base_psnr, base_ssim = self._validate_base(loader_val)
+                val_psnr, val_ssim = self._validate(loader_val)
 
                 ########################## 3. print and tensorboard ########################
                 print("Epoch {}/{}".format(epoch + 1, self.num_epoch))
@@ -115,7 +126,7 @@ class Solver():
                 ## save the best model according to validation psnr
                 if best_val_psnr < val_psnr:
                     best_val_psnr = val_psnr
-                    best_name = self.task_name + '_' + 'best.pth'  ###
+                    best_name = self.task_name + '_best.pth'
                     state = {'net': self.net.state_dict(), 'epoch': epoch, 'val_psnr': val_psnr, 'val_ssim': val_ssim}
                     torch.save(state, join(self.saveDir, best_name))
         self.writer.close()
@@ -203,11 +214,29 @@ class Solver():
 
         return loss_g
 
-    def _validate(self, loader_val):
+    def _validate_base(self, loader_val):
 
         base_psnr = 0
-        test_psnr = 0
         base_ssim = 0
+
+        for data_dict in loader_val:
+            im_A, im_A_und, = data_dict['im_A'].float().cuda(), data_dict['im_A_und'].float().cuda()
+            ############## convert model ouput to complex value in original range
+            im_A = output2complex(im_A)
+            im_A_und = output2complex(im_A_und)
+            ########################### cal metrics ###################################
+            for im_A_i, im_A_und_i in zip(im_A.cpu().numpy(),
+                                          im_A_und.cpu().numpy()):
+                ## for skimage.metrics, input is (im_true,im_pred)
+                base_ssim += cal_ssim(im_A_i, im_A_und_i)
+                base_psnr += cal_psnr(im_A_i, im_A_und_i, data_range=im_A_i.max())
+        base_psnr /= self.slices_val
+        base_ssim /= self.slices_val
+        return base_psnr, base_ssim
+
+    def _validate(self, loader_val):
+
+        test_psnr = 0
         test_ssim = 0
 
         self.net.eval()
@@ -219,24 +248,16 @@ class Solver():
                                                     'mask_A'].float().cuda()
 
                 T1 = self.net(im_A_und, k_A_und, mask)
-
                 ############## convert model ouput to complex value in original range
                 T1 = output2complex(T1)
                 im_A = output2complex(im_A)
-                im_A_und = output2complex(im_A_und)
 
-                ########################## 2.1 cal psnr for validation ###################################
-                ########################### cal ssim ###################################
-                for T1_i, im_A_i, im_A_und_i in zip(T1.cpu().numpy(), im_A.cpu().numpy(),
-                                                    im_A_und.cpu().numpy()):
+                ########################### cal metrics ###################################
+                for T1_i, im_A_i in zip(T1.cpu().numpy(), im_A.cpu().numpy()):
                     ## for skimage.metrics, input is (im_true,im_pred)
-                    base_ssim += cal_ssim(im_A_i, im_A_und_i)
                     test_ssim += cal_ssim(im_A_i, T1_i)
-                    base_psnr += cal_psnr(im_A_i, im_A_und_i, data_range=im_A_i.max())
                     test_psnr += cal_psnr(im_A_i, T1_i, data_range=im_A_i.max())
 
-        base_psnr /= self.slices_val
         test_psnr /= self.slices_val
-        base_ssim /= self.slices_val
         test_ssim /= self.slices_val
-        return base_psnr, test_psnr, base_ssim, test_ssim
+        return test_psnr, test_ssim

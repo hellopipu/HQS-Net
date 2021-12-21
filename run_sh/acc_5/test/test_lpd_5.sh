@@ -1,5 +1,5 @@
 CUDA_VISIBLE_DEVICES=3 python main.py \
---mode 'train' \
+--mode 'test' \
 --model 'lpd-net' \
 --acc 5 \
 --batch_size 1 \

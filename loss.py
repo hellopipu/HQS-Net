@@ -1,7 +1,7 @@
 # @author       : Bingyu Xin   
 # @Institute    : CS@Rutgers
 
-## MS-SSIM loss is taken from https://github.com/VainF/pytorch-msssim/blob/master/pytorch_msssim/ssim.py
+## MS-SSIM loss is modified from https://github.com/VainF/pytorch-msssim/blob/master/pytorch_msssim/ssim.py
 
 import warnings
 import torch
@@ -319,10 +319,13 @@ class MS_SSIM(torch.nn.Module):
 
 class CompoundLoss(nn.Module):
 
-    def __init__(self):
+    def __init__(self, ssim_type='ssim'):
         super().__init__()
         self.l1loss = nn.L1Loss()
-        self.msssim = MS_SSIM(win_size=7, data_range=1., size_average=True, channel=1, K=(0.01, 0.03))
+        if ssim_type == 'ssim':
+            self.msssim = SSIM(win_size=7, data_range=1., size_average=True, channel=1, K=(0.01, 0.03))
+        elif ssim_type == 'ms-ssim':
+            self.msssim = MS_SSIM(win_size=7, data_range=1., size_average=True, channel=1, K=(0.01, 0.03))
         self.alpha = 0.84
 
     def forward(self, pred, target):
