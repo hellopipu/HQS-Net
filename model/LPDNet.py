@@ -75,8 +75,9 @@ class LPDNet(nn.Module):
 
 if __name__ == '__main__':
     net = LPDNet()  #
-    k = torch.zeros((1, 2, 64, 64))
+    im_un = torch.zeros((1, 2, 64, 64))
+    k_un = torch.zeros((1, 2, 64, 64))
     mask = torch.zeros((1, 2, 64, 64))
     with torch.no_grad():
-        y = net(k, k, mask)
+        y = net(im_un, k_un, mask)
     print('Total # of params: %.5fM' % (sum(p.numel() for p in net.parameters()) / (1024.0 * 1024)))

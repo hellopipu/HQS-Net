@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 from collections import OrderedDict
 
+
 def conv_block(model_name='hqs-net', channel_in=22, n_convs=3, n_filters=32):
     '''
     reconstruction blocks in DC-CNN;
@@ -20,11 +21,11 @@ def conv_block(model_name='hqs-net', channel_in=22, n_convs=3, n_filters=32):
     if model_name == 'dc-cnn':
         channel_out = channel_in
     elif model_name == 'prim-net' or model_name == 'hqs-net':
-        channel_out = channel_in-2
+        channel_out = channel_in - 2
     elif model_name == 'dual-net':
-        channel_out = channel_in-4
+        channel_out = channel_in - 4
 
-    for i in range(n_convs-1):
+    for i in range(n_convs - 1):
         if i == 0:
             layers.append(nn.Conv2d(channel_in, n_filters, kernel_size=3, stride=1, padding=1))
         else:
@@ -34,6 +35,7 @@ def conv_block(model_name='hqs-net', channel_in=22, n_convs=3, n_filters=32):
     layers.append(nn.Conv2d(n_filters, channel_out, kernel_size=3, stride=1, padding=1))
 
     return nn.Sequential(*layers)
+
 
 ########################################## below are external codes from other repo #######################################
 
@@ -317,12 +319,13 @@ class UNetRes(nn.Module):
 
         return x
 
+
 if __name__ == '__main__':
     x = torch.rand(1, 22, 256, 256)
-    net = UNetRes(in_nc=22, out_nc=20, nc=[64, 128, 256, 512], nb=4, act_mode='R', downsample_mode="strideconv", upsample_mode="convtranspose")
+    net = UNetRes(in_nc=22, out_nc=20, nc=[64, 128, 256, 512], nb=4, act_mode='R', downsample_mode="strideconv",
+                  upsample_mode="convtranspose")
     net.eval()
     with torch.no_grad():
         y = net(x)
-    y.size()
-
+    print(y.shape)
     print('    Total params: %.5fMB' % (sum(p.numel() for p in net.parameters()) / (1024.0 * 1024)))

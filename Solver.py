@@ -45,7 +45,7 @@ class Solver():
         self.task_name = self.model_name + '_acc_' + str(self.acc) + '_bs_' + str(self.batch_size) \
                          + '_lr_' + str(self.lr)
         print('task_name: ', self.task_name)
-        self.model_path = 'weight/' + self.task_name + '_' + 'best.pth'  # model load path for test and visualization
+        self.model_path = 'weight/' + self.task_name + '_best.pth'  # model load path for test and visualization
 
         ############################################ Specify network ############################################
         if self.model_name == 'dc-cnn':

@@ -56,7 +56,7 @@ class HQSNet(nn.Module):
     def forward(self, img, k, mask):
 
         ## initialize buffer f : the concatenation of m copies of the complex-valued zero-filled images
-        f = torch.cat([img] * self.m, 1).cuda()
+        f = torch.cat([img] * self.m, 1).to(img.device)
 
         ## n reconstruction blocks
         for i in range(self.n_iter):
@@ -67,3 +67,13 @@ class HQSNet(nn.Module):
             elif self.block_type == 'unet':
                 f = f + self.rec_blocks(torch.cat([f, updated_f_1], 1))
         return f[:, 0:2]
+
+
+if __name__ == '__main__':
+    net = HQSNet()  #
+    im_un = torch.zeros((1, 2, 64, 64))
+    k_un = torch.zeros((1, 2, 64, 64))
+    mask = torch.zeros((1, 2, 64, 64))
+    with torch.no_grad():
+        y = net(im_un, k_un, mask)
+    print('Total # of params: %.5fM' % (sum(p.numel() for p in net.parameters()) / (1024.0 * 1024)))

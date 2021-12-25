@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from model.BasicModule import conv_block
 
+
 class DCCNN(nn.Module):
     def __init__(self, n_iter=5, n_convs=5, n_filters=64, norm='ortho'):
         '''
@@ -44,3 +45,13 @@ class DCCNN(nn.Module):
             x = x + x_cnn
             x = self.dc_operation(x, k, m)
         return x
+
+
+if __name__ == '__main__':
+    net = DCCNN()  #
+    im_un = torch.zeros((1, 2, 64, 64))
+    k_un = torch.zeros((1, 2, 64, 64))
+    mask = torch.zeros((1, 2, 64, 64))
+    with torch.no_grad():
+        y = net(im_un, k_un, mask)
+    print('Total # of params: %.5fM' % (sum(p.numel() for p in net.parameters()) / (1024.0 * 1024)))
