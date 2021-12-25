@@ -234,7 +234,6 @@ def ms_ssim(
 class SSIM(torch.nn.Module):
     def __init__(
             self,
-            data_range=255,
             size_average=True,
             win_size=11,
             win_sigma=1.5,
@@ -258,15 +257,14 @@ class SSIM(torch.nn.Module):
         self.win_size = win_size
         self.win = _fspecial_gauss_1d(win_size, win_sigma).repeat([channel, 1] + [1] * spatial_dims)
         self.size_average = size_average
-        self.data_range = data_range
         self.K = K
         self.nonnegative_ssim = nonnegative_ssim
 
-    def forward(self, X, Y):
+    def forward(self, X, Y, data_range):
         return ssim(
             X,
             Y,
-            data_range=self.data_range,
+            data_range=data_range,
             size_average=self.size_average,
             win=self.win,
             K=self.K,
@@ -277,7 +275,6 @@ class SSIM(torch.nn.Module):
 class MS_SSIM(torch.nn.Module):
     def __init__(
             self,
-            data_range=255,
             size_average=True,
             win_size=11,
             win_sigma=1.5,
@@ -301,15 +298,14 @@ class MS_SSIM(torch.nn.Module):
         self.win_size = win_size
         self.win = _fspecial_gauss_1d(win_size, win_sigma).repeat([channel, 1] + [1] * spatial_dims)
         self.size_average = size_average
-        self.data_range = data_range
         self.weights = weights
         self.K = K
 
-    def forward(self, X, Y):
+    def forward(self, X, Y, data_range=1.):
         return ms_ssim(
             X,
             Y,
-            data_range=self.data_range,
+            data_range=data_range,
             size_average=self.size_average,
             win=self.win,
             weights=self.weights,
@@ -323,12 +319,12 @@ class CompoundLoss(nn.Module):
         super().__init__()
         self.l1loss = nn.L1Loss()
         if ssim_type == 'ssim':
-            self.msssim = SSIM(win_size=7, data_range=1., size_average=True, channel=1, K=(0.01, 0.03))
+            self.msssim = SSIM(win_size=7, size_average=True, channel=1, K=(0.01, 0.03))
         elif ssim_type == 'ms-ssim':
-            self.msssim = MS_SSIM(win_size=7, data_range=1., size_average=True, channel=1, K=(0.01, 0.03))
+            self.msssim = MS_SSIM(win_size=7, size_average=True, channel=1, K=(0.01, 0.03))
         self.alpha = 0.84
 
-    def forward(self, pred, target):
+    def forward(self, pred, target, data_range=1.):
         l1_loss = self.l1loss(pred, target)
-        ssim_loss = 1 - self.msssim(pred.unsqueeze(1), target.unsqueeze(1))
+        ssim_loss = 1 - self.msssim(pred.unsqueeze(1), target.unsqueeze(1), data_range)
         return (1 - self.alpha) * l1_loss + self.alpha * ssim_loss

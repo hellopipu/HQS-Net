@@ -3,6 +3,7 @@
 
 import os
 import time
+import operator
 import torch
 import ismrmrd
 import ismrmrd.xsd
@@ -11,12 +12,94 @@ from numpy.lib.stride_tricks import as_strided
 from torch.fft import fft2, ifft2
 
 
-def crop_img(data, shape):
-    w_from = (data.shape[0] - shape[0]) // 2
-    h_from = (data.shape[1] - shape[1]) // 2
-    w_to = w_from + shape[0]
-    h_to = h_from + shape[1]
-    return data[w_from:w_to, h_from:h_to, ...]
+def is_num(a):
+    return isinstance(a, int) or isinstance(a, float)
+
+
+def delta(x1, x2):
+    delta_ = x2 - x1
+    return delta_ // 2, delta_ - delta_ // 2
+
+
+def get_padding_width(o_shape, d_shape):
+    if is_num(o_shape):
+        o_shape, d_shape = [o_shape], [d_shape]
+    assert len(o_shape) == len(d_shape), 'Length mismatched!'
+    borders = []
+    for o, d in zip(o_shape, d_shape):
+        borders.extend(delta(o, d))
+    return borders
+
+
+def get_crop_width(o_shape, d_shape):
+    return get_padding_width(d_shape, o_shape)
+
+
+def get_padding_shape_with_stride(o_shape, stride):
+    assert isinstance(o_shape, list) or isinstance(o_shape, tuple) or isinstance(o_shape, np.ndarray)
+    o_shape = np.array(o_shape)
+    d_shape = np.ceil(o_shape / stride) * stride
+    return d_shape.astype(np.int32)
+
+
+def pad(arr, d_shape, mode='constant', value=0, strict=True):
+    """
+    pad numpy array, tested!
+    :param arr: numpy array
+    :param d_shape: array shape after padding or minimum shape
+    :param mode: padding mode,
+    :param value: padding value
+    :param strict: if True, d_shape must be greater than arr shape and output shape is d_shape. if False, d_shape is minimum shape and output shape is np.maximum(arr.shape, d_shape)
+    :return: padded arr with expected shape
+    """
+    assert arr.ndim == len(d_shape), 'Dimension mismatched!'
+    if not strict:
+        d_shape = np.maximum(arr.shape, d_shape)
+    else:
+        assert np.all(np.array(d_shape) >= np.array(arr.shape)), 'Padding shape must be greater than arr shape'
+    borders = np.array(get_padding_width(arr.shape, d_shape))
+    before = borders[list(range(0, len(borders), 2))]
+    after = borders[list(range(1, len(borders), 2))]
+    padding_borders = tuple(zip([int(x) for x in before], [int(x) for x in after]))
+    # print(padding_borders)
+    if mode == 'constant':
+        return np.pad(arr, padding_borders, mode=mode, constant_values=value)
+    else:
+        return np.pad(arr, padding_borders, mode=mode)
+
+
+def crop(arr, d_shape, strict=True):
+    """
+    central  crop numpy array, tested!
+    :param arr: numpy array
+    :param d_shape: expected shape
+    :return: cropped array with expected array
+    """
+    assert arr.ndim == len(d_shape), 'Dimension mismatched!'
+    if not strict:
+        d_shape = np.minimum(arr.shape, d_shape)
+    else:
+        assert np.all(np.array(d_shape) <= np.array(arr.shape)), 'Crop shape must be smaller than arr shape'
+    borders = np.array(get_crop_width(arr.shape, d_shape))
+    start = borders[list(range(0, len(borders), 2))]
+    # end = - borders[list(range(1, len(borders), 2))]
+    end = map(operator.add, start, d_shape)
+    slices = tuple(map(slice, start, end))
+    return arr[slices]
+
+
+def pad_crop(arr, d_shape, mode='constant', value=0):
+    """
+    pad or crop numpy array to expected shape, tested!
+    :param arr: numpy array
+    :param d_shape: expected shape
+    :param mode: padding mode,
+    :param value: padding value
+    :return: padded and cropped array
+    """
+    assert arr.ndim == len(d_shape), 'Dimension mismatched!'
+    arr = pad(arr, d_shape, mode, value, strict=False)
+    return crop(arr, d_shape)
 
 
 def undersample(image, mask, norm='ortho'):

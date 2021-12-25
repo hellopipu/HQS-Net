@@ -3,9 +3,7 @@
 import os
 from os.path import join
 import time
-import numpy as np
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 import torch
 import torch.optim as optim
 import torch.utils.data as Data
@@ -77,7 +75,7 @@ class Solver():
         else:
             self.criterion = CompoundLoss('ms-ssim')
 
-        ############################################ Specify optimizer ############################################
+        ############################################ Specify optimizer ########################################
 
         self.optimizer_G = optim.Adam(self.net.parameters(), lr=self.lr, eps=1e-3, weight_decay=1e-10)
 
@@ -94,10 +92,10 @@ class Solver():
         print("slices of 2d train data: ", len(dataset_train))
         print("slices of 2d validation data: ", len(dataset_val))
 
-        ############################################ setting for tensorboard ############################################
+        ############################################ setting for tensorboard ###################################
         self.writer = SummaryWriter('log/' + self.task_name)
 
-        ############################################ start to run epochs ############################################
+        ############################################ start to run epochs #######################################
 
         start_epoch = 0
         best_val_psnr = 0
@@ -142,8 +140,9 @@ class Solver():
         len_data = len(dataset_val)
         print("slices of 2d test data: ", len_data)
         checkpoint = torch.load(self.model_path)
-        print('best epoch at :', checkpoint['epoch'], 'val_psnr: ', checkpoint['val_psnr'], 'val_ssim: ',
-              checkpoint['val_ssim'])
+
+        print("best epoch at : {}, val_psnr: {:.6f}, val_ssim: {:.6f}" \
+              .format(checkpoint['epoch'], checkpoint['val_psnr'], checkpoint['val_ssim']))
 
         self.net.load_state_dict(checkpoint['net'])
         self.net.cuda()
@@ -180,7 +179,7 @@ class Solver():
 
             time_1 = time.time()
             ## comment metric calculation code for more precise inference speed
-            print('inference speed: {:.5f} us/slice'.format(1000 * (time_1 - time_0) / len_data))
+            print('inference speed: {:.5f} ms/slice'.format(1000 * (time_1 - time_0) / len_data))
         base_psnr /= len_data
         test_psnr /= len_data
         base_ssim /= len_data
@@ -200,14 +199,13 @@ class Solver():
         for data_dict in tqdm(loader_train):
             im_A, im_A_und, k_A_und, mask = data_dict['im_A'].float().cuda(), data_dict[
                 'im_A_und'].float().cuda(), data_dict['k_A_und'].float().cuda(), data_dict['mask_A'].float().cuda()
-
             T1 = self.net(im_A_und, k_A_und, mask)
 
             T1 = output2complex(T1)
             im_A = output2complex(im_A)
             ############################################# 1.2 update generator #############################################
 
-            loss_g = self.criterion(T1, im_A)
+            loss_g = self.criterion(T1, im_A, data_range=im_A.max())
             self.optimizer_G.zero_grad()
             loss_g.backward()
             self.optimizer_G.step()
@@ -228,7 +226,7 @@ class Solver():
             for im_A_i, im_A_und_i in zip(im_A.cpu().numpy(),
                                           im_A_und.cpu().numpy()):
                 ## for skimage.metrics, input is (im_true,im_pred)
-                base_ssim += cal_ssim(im_A_i, im_A_und_i)
+                base_ssim += cal_ssim(im_A_i, im_A_und_i, data_range=im_A_i.max())
                 base_psnr += cal_psnr(im_A_i, im_A_und_i, data_range=im_A_i.max())
         base_psnr /= self.slices_val
         base_ssim /= self.slices_val
@@ -246,7 +244,6 @@ class Solver():
                 im_A, im_A_und, k_A_und, mask = data_dict['im_A'].float().cuda(), data_dict[
                     'im_A_und'].float().cuda(), data_dict['k_A_und'].float().cuda(), data_dict[
                                                     'mask_A'].float().cuda()
-
                 T1 = self.net(im_A_und, k_A_und, mask)
                 ############## convert model ouput to complex value in original range
                 T1 = output2complex(T1)
@@ -255,7 +252,7 @@ class Solver():
                 ########################### cal metrics ###################################
                 for T1_i, im_A_i in zip(T1.cpu().numpy(), im_A.cpu().numpy()):
                     ## for skimage.metrics, input is (im_true,im_pred)
-                    test_ssim += cal_ssim(im_A_i, T1_i)
+                    test_ssim += cal_ssim(im_A_i, T1_i, data_range=im_A_i.max())
                     test_psnr += cal_psnr(im_A_i, T1_i, data_range=im_A_i.max())
 
         test_psnr /= self.slices_val

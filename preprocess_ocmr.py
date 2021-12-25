@@ -16,7 +16,7 @@ import numpy as np
 from numpy.fft import fftshift, ifftshift, ifft2
 import math
 from scipy.optimize import minimize
-from utils import crop_img
+from utils import pad_crop
 
 
 def get_data(path_dir, csv_file, scn):
@@ -59,8 +59,8 @@ def get_data(path_dir, csv_file, scn):
         im_coil_ = im_coil_.reshape((image.shape[0], image.shape[1], CH, -1))
 
         ## pad or crop to fixed size
-        image = crop_img(image, (192, 160, image.shape[2]))
-        im_coil_ = crop_img(im_coil_, (192, 160, im_coil_.shape[2], im_coil_.shape[3]))
+        image = pad_crop(image, (192, 160, image.shape[2]))
+        im_coil_ = pad_crop(im_coil_, (192, 160, im_coil_.shape[2], im_coil_.shape[3]))
 
         ## emulate single-coil img from multi-coil using LBFGS
         def error_func(x):
