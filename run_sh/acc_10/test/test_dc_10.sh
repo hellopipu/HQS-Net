@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=3 python main.py \
+CUDA_VISIBLE_DEVICES=1 python main.py \
 --mode 'test' \
 --model 'dc-cnn' \
 --acc 10 \

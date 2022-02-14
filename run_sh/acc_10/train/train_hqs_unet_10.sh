@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=2 python main.py \
+CUDA_VISIBLE_DEVICES=3 python main.py \
 --mode 'train' \
 --model 'hqs-net-unet' \
 --acc 10 \

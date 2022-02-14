@@ -7,7 +7,7 @@ from model.BasicModule import UNetRes
 
 
 class HQSNet(nn.Module):
-    def __init__(self, buffer_size=5, n_iter=10, n_convs=3, n_filters=32, block_type='cnn', norm='ortho'):
+    def __init__(self, buffer_size=5, n_iter=8, n_convs=6, n_filters=64, block_type='cnn', norm='ortho'):
         '''
         HQS-Net
         :param buffer_size: buffer_size m
@@ -20,13 +20,13 @@ class HQSNet(nn.Module):
         self.m = buffer_size
         self.n_iter = n_iter
         ## the initialization of mu may influence the final accuracy
-        self.mu = nn.Parameter(2. * torch.ones((1, 1)))
+        self.mu = nn.Parameter(0.5 * torch.ones((1, 1))) #2
         self.block_type = block_type
         if self.block_type == 'cnn':
             rec_blocks = []
             for i in range(self.n_iter):
                 rec_blocks.append(
-                    conv_block('hqs-net', channel_in=2 * (self.m + 1), n_convs=n_convs, n_filters=n_filters))
+                    conv_block('hqs-net', channel_in=2 * (self.m+1 ), n_convs=n_convs, n_filters=n_filters)) #self.m +
             self.rec_blocks = nn.ModuleList(rec_blocks)
         elif self.block_type == 'unet':
             self.rec_blocks = UNetRes(in_nc=2 * (self.m + 1), out_nc=2 * self.m, nc=[64, 128, 256, 512], nb=4,
@@ -56,7 +56,19 @@ class HQSNet(nn.Module):
     def forward(self, img, k, mask):
 
         ## initialize buffer f : the concatenation of m copies of the complex-valued zero-filled images
+
         f = torch.cat([img] * self.m, 1).to(img.device)
+
+        ## n reconstruction blocks  buff=5_nocat
+        # for i in range(self.n_iter):
+        #     for j in range(self.m):
+        #         f_1 = f[:, j*2:j*2+2].clone()
+        #         f[:, j*2:j*2+2] = self.update_opration(f_1, k, mask)
+        #     if self.block_type == 'cnn':
+        #         # f = f + self.rec_blocks[i](torch.cat([f, updated_f_1], 1))
+        #         f = f + self.rec_blocks[i](f)
+        #     elif self.block_type == 'unet':
+        #         f = f + self.rec_blocks(torch.cat([f, updated_f_1], 1))
 
         ## n reconstruction blocks
         for i in range(self.n_iter):
@@ -64,6 +76,7 @@ class HQSNet(nn.Module):
             updated_f_1 = self.update_opration(f_1, k, mask)
             if self.block_type == 'cnn':
                 f = f + self.rec_blocks[i](torch.cat([f, updated_f_1], 1))
+                # f = updated_f_1 + self.rec_blocks[i](updated_f_1)
             elif self.block_type == 'unet':
                 f = f + self.rec_blocks(torch.cat([f, updated_f_1], 1))
         return f[:, 0:2]

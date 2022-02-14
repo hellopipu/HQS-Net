@@ -7,7 +7,7 @@ from model.BasicModule import conv_block
 
 
 class LPDNet(nn.Module):
-    def __init__(self, n_primal=5, n_dual=5, n_iter=10, n_convs=3, n_filters=32, norm='ortho'):
+    def __init__(self, n_primal=5, n_dual=5, n_iter=8, n_convs=6, n_filters=64, norm='ortho'):
         '''
         LPD-Net modified from paper " Learned primal-dual reconstruction "
         ( https://arxiv.org/abs/1707.06474 ) ( https://github.com/adler-j/learned_primal_dual )

@@ -20,6 +20,8 @@ def conv_block(model_name='hqs-net', channel_in=22, n_convs=3, n_filters=32):
     layers = []
     if model_name == 'dc-cnn':
         channel_out = channel_in
+    if model_name == 'ista-net':
+        channel_out = n_filters
     elif model_name == 'prim-net' or model_name == 'hqs-net':
         channel_out = channel_in - 2
     elif model_name == 'dual-net':

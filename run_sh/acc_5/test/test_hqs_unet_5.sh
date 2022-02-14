@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=2 python main.py \
+CUDA_VISIBLE_DEVICES=1 python main.py \
 --mode 'test' \
 --model 'hqs-net-unet' \
 --acc 5 \

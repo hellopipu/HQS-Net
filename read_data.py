@@ -52,7 +52,7 @@ class MyData(Dataset):
             img_A = t(img_A)
 
         ## normalize to [0,1]
-        img_A = img_A / img_A.max()
+        # img_A = img_A / img_A.max()
         ## 2 channel real to complex
         img_A = img_A[0] + 1j * img_A[1]
 
@@ -61,7 +61,8 @@ class MyData(Dataset):
     def get_sample(self, index, mask):
 
         image_A = self.images[index]
-
+        image_A_abs = (image_A[0]**2 + image_A[1]**2)**0.5
+        image_A = image_A/np.percentile(image_A_abs, 99)
         ########################### image preprocessing ##########################
         # transform
         image_A = self.transform(image_A)
