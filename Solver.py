@@ -45,7 +45,7 @@ class Solver():
             os.makedirs(self.saveDir)
 
         self.task_name = self.model_name + '_acc_' + str(self.acc) + '_bs_' + str(self.batch_size) \
-                         + '_lr_' + str(self.lr) + 'bf_5_nocat' #first_dc'#'_iter_10'#'_bf=1' #+  _nocat '_bf=1'#
+                         + '_lr_' + str(self.lr) # + 'bf_5_nocat' #first_dc'#'_iter_10'#'_bf=1' #+  _nocat '_bf=1'#
         print('task_name: ', self.task_name)
         self.model_path = 'weight/' + self.task_name + '_best.pth'  # model load path for test and visualization
 
@@ -59,7 +59,7 @@ class Solver():
         elif self.model_name == 'hqs-net':
             self.net = HQSNet(block_type='cnn',buffer_size=5, n_iter=8)
         elif self.model_name == 'hqs-net-unet':
-            self.net = HQSNet(block_type='unet', n_iter=10)
+            self.net = HQSNet(block_type='unet',buffer_size=5, n_iter=10)
         else:
             assert "wrong model name !"
         print('Total # of model params: %.5fM' % (sum(p.numel() for p in self.net.parameters()) / 10.**6))
