@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=2 python main.py \
+CUDA_VISIBLE_DEVICES=0 python main.py \
 --mode 'train' \
 --model 'ista-net-plus' \
 --acc 5 \

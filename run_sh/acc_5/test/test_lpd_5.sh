@@ -1,4 +1,4 @@
-CUDA_VISIBLE_DEVICES=3 python main.py \
+CUDA_VISIBLE_DEVICES=0 python main.py \
 --mode 'test' \
 --model 'lpd-net' \
 --acc 5 \
