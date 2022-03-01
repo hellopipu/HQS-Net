@@ -4,5 +4,5 @@ pandas
 tqdm
 scipy
 torchvision
-argparse
+torch >= 1.10
 tensorboardX
