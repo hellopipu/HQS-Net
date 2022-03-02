@@ -2,15 +2,15 @@
 # @Institute    : CS@Rutgers
 import torch
 import torch.nn as nn
-from model.BasicModule import conv_block
 import torch.nn.functional as F
 from torch.nn import init
 
+
 # Define ISTA-Net-plus Block
 class BasicBlock(torch.nn.Module):
-    def __init__(self,norm='ortho'):
+    def __init__(self, norm='ortho'):
         super(BasicBlock, self).__init__()
-        self.norm=norm
+        self.norm = norm
         self.lambda_step = nn.Parameter(torch.Tensor([0.5]))
         self.soft_thr = nn.Parameter(torch.Tensor([0.01]))
 
@@ -24,6 +24,7 @@ class BasicBlock(torch.nn.Module):
         self.conv2_backward = nn.Parameter(init.xavier_normal_(torch.Tensor(num_filter, num_filter, 3, 3)))
 
         self.conv_G = nn.Parameter(init.xavier_normal_(torch.Tensor(2, num_filter, 3, 3)))
+
     def _forward_operation(self, img, mask):
 
         k = torch.fft.fft2(torch.view_as_complex(img.permute(0, 2, 3, 1).contiguous()),
@@ -66,20 +67,22 @@ class BasicBlock(torch.nn.Module):
 
         x_pred = x_input + x_G
 
-        if 1:
+        if self.training:
             x = F.conv2d(x_forward, self.conv1_backward, padding=1)
             x = F.relu(x)
             x_D_est = F.conv2d(x, self.conv2_backward, padding=1)
             symloss = x_D_est - x_D
             return x_pred, symloss
         else:
-            return x_pred, x_pred
-    
+            return x_pred, None
+
+
 class ISTANetplus(nn.Module):
     def __init__(self, n_iter=8, n_convs=5, n_filters=64, norm='ortho'):
         '''
-        DC-CNN modified from paper " A Deep Cascade of Convolutional Neural Networks for Dynamic MR Image Reconstruction "
-        ( https://arxiv.org/pdf/1704.02422.pdf ) ( https://github.com/js3611/Deep-MRI-Reconstruction )
+        ISTANetplus modified from paper " ISTA-Net: Interpretable Optimization-Inspired Deep Network for Image
+Compressive Sensing "
+        ( https://arxiv.org/pdf/1706.07929.pdf ) ( https://github.com/jianzhangcs/ISTA-Net-PyTorch )
         :param n_iter: num of iterations
         :param n_convs: num of convs in each block
         :param n_filters: num of feature channels in intermediate features
@@ -90,27 +93,16 @@ class ISTANetplus(nn.Module):
         rec_blocks = []
         self.norm = norm
         self.n_iter = n_iter
-
         for i in range(n_iter):
             rec_blocks.append(BasicBlock(norm=self.norm))
         self.rec_blocks = nn.ModuleList(rec_blocks)
 
-
-
     def forward(self, x, k, m):
         layers_sym = []  # for computing symmetric loss
         for i in range(self.n_iter):
-            # x = self.update_opration(x, k, m,i)
-            x, layer_sym = self.rec_blocks[i](x,k,m)
+            x, layer_sym = self.rec_blocks[i](x, k, m)
             layers_sym.append(layer_sym)
-        return x, layers_sym
-
-
-if __name__ == '__main__':
-    net = ISTANet()  #
-    im_un = torch.zeros((1, 2, 64, 64))
-    k_un = torch.zeros((1, 2, 64, 64))
-    mask = torch.zeros((1, 2, 64, 64))
-    with torch.no_grad():
-        y = net(im_un, k_un, mask)
-    print('Total # of params: %.5fM' % (sum(p.numel() for p in net.parameters()) / (1024.0 * 1024)))
+        if self.training:
+            return x, layers_sym
+        else:
+            return x

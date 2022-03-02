@@ -21,21 +21,21 @@ from model.HQSNet import HQSNet
 from model.ISTANet_plus import ISTANetplus
 import numpy as np
 
+
 class Solver():
     def __init__(self, args):
         torch.autograd.set_detect_anomaly(True)
         self.args = args
         ################  experiment settings  ################
         self.model_name = self.args.model
-
-        self.acc = self.args.acc  # for ocmr dataset only
+        self.acc = self.args.acc
         self.imageDir_train = self.args.train_path  # train path
         self.imageDir_val = self.args.val_path  # val path while training
         self.imageDir_test = self.args.test_path  # test path
-        self.num_epoch = self.args.num_epoch
+        self.num_epoch = self.args.num_epoch  # training epochs
         self.batch_size = self.args.batch_size  # batch size
-        self.val_on_epochs = self.args.val_on_epochs  # val on each val_on_epochs epochs;
-
+        self.val_on_epochs = self.args.val_on_epochs  # validate on every val_on_epochs;
+        self.resume = self.args.resume  # resume training
         ## settings for optimizer
         self.lr = self.args.lr
         ## settings for data preprocessing
@@ -45,9 +45,9 @@ class Solver():
             os.makedirs(self.saveDir)
 
         self.task_name = self.model_name + '_acc_' + str(self.acc) + '_bs_' + str(self.batch_size) \
-                         + '_lr_' + str(self.lr) # + 'bf_5_nocat' #first_dc'#'_iter_10'#'_bf=1' #+  _nocat '_bf=1'#
+                         + '_lr_' + str(self.lr)
         print('task_name: ', self.task_name)
-        self.model_path = 'weight/' + self.task_name + '_best.pth'  # model load path for test and visualization
+        self.model_path = 'weight/' + self.task_name + '_best.pth'  # model load path for test
 
         ############################################ Specify network ############################################
         if self.model_name == 'dc-cnn':
@@ -57,26 +57,21 @@ class Solver():
         elif self.model_name == 'lpd-net':
             self.net = LPDNet(n_iter=8)
         elif self.model_name == 'hqs-net':
-            self.net = HQSNet(block_type='cnn',buffer_size=5, n_iter=8)
+            self.net = HQSNet(block_type='cnn', buffer_size=5, n_iter=8)
         elif self.model_name == 'hqs-net-unet':
-            self.net = HQSNet(block_type='unet',buffer_size=5, n_iter=10)
+            # HQS-Net-Unet is for best reconstruction quality, so we enlarge the model, it is not a fair comparison to other models
+            self.net = HQSNet(block_type='unet', buffer_size=5, n_iter=10)
         else:
             assert "wrong model name !"
-        print('Total # of model params: %.5fM' % (sum(p.numel() for p in self.net.parameters()) / 10.**6))
+        print('Total # of model params: %.5fM' % (sum(p.numel() for p in self.net.parameters()) / 10. ** 6))
         self.net.cuda()
 
     def train(self):
 
         ############################################ Specify loss ############################################
         ## Notice:
-        ## 0. generally, ms-ssim is slightly better than ssim
-        ## 1. we train all models with ms-ssim + l1 loss, except hqs-net-unet
-        ## 2. we train the hqs-net-unet model with ssim + l1 loss, the reason is that, we found when using ms-ssim loss,
-        ## the gradient of ms-ssim may be nan. This bug exists in both pytorch and tensoflow implementation of ms-ssim loss.
-        ## see https://github.com/tensorflow/tensorflow/issues/50400, https://github.com/VainF/pytorch-msssim/issues/12
-        # if self.model_name == 'hqs-net-unet':
-        #     self.criterion = CompoundLoss('ssim')
-        # else:
+        ## there is an unknown backward gradient bug when training HQS-Net-Unet, which may interupt the training,
+        ## you can simply resume the training by setting for --resume 1 in the scripts.
         self.criterion = CompoundLoss('ms-ssim')
 
         ############################################ Specify optimizer ########################################
@@ -105,13 +100,13 @@ class Solver():
 
         start_epoch = 0
         best_val_psnr = 0
-        if 0:
+        if self.resume:
             best_name = self.task_name + '_best.pth'
             checkpoint = torch.load(join(self.saveDir, best_name))
             self.net.load_state_dict(checkpoint['net'])
-            start_epoch = checkpoint['epoch']+1
+            start_epoch = checkpoint['epoch'] + 1
             best_val_psnr = checkpoint['val_psnr']
-            print('load pretrained model---, start epoch at, ',start_epoch, ', star_psnr_val is: ',best_val_psnr)
+            print('load pretrained model---, start epoch at, ', start_epoch, ', star_psnr_val is: ', best_val_psnr)
         for epoch in range(start_epoch, self.num_epoch):
             ####################### 1. training #######################
 
@@ -172,11 +167,7 @@ class Solver():
                 im_A, im_A_und, k_A_und, mask = data_dict['im_A'].float().cuda(), data_dict['im_A_und'].float().cuda(), \
                                                 data_dict['k_A_und'].float().cuda(), \
                                                 data_dict['mask_A'].float().cuda()
-
-                if self.model_name == 'ista-net-plus':
-                    T1, loss_layers_sym = self.net(im_A_und, k_A_und, mask)
-                else:
-                    T1 = self.net(im_A_und, k_A_und, mask)
+                T1 = self.net(im_A_und, k_A_und, mask)
                 ############## convert model ouput to complex value in original range
 
                 T1 = output2complex(T1)
@@ -197,12 +188,12 @@ class Solver():
             ## comment metric calculation code for more precise inference speed
             print('inference speed: {:.5f} ms/slice'.format(1000 * (time_1 - time_0) / len_data))
 
-        print(" base PSNR:\t\t{:.6f}, std: {:.6f}".format(np.mean(base_psnr),np.std(base_psnr)))
-        print(" test PSNR:\t\t{:.6f}, std: {:.6f}".format(np.mean(test_psnr),np.std(test_psnr)))
-        print(" base SSIM:\t\t{:.6f}, std: {:.6f}".format(np.mean(base_ssim),np.std(base_ssim)))
-        print(" test SSIM:\t\t{:.6f}, std: {:.6f}".format(np.mean(test_ssim),np.std(test_ssim)))
-        print(" base NRMSE:\t\t{:.6f}, std: {:.6f}".format(np.mean(base_nrmse),np.std(base_nrmse)))
-        print(" test NRMSE:\t\t{:.6f}, std: {:.6f}".format(np.mean(test_nrmse),np.std(test_nrmse)))
+        print(" base PSNR:\t\t{:.6f}, std: {:.6f}".format(np.mean(base_psnr), np.std(base_psnr)))
+        print(" test PSNR:\t\t{:.6f}, std: {:.6f}".format(np.mean(test_psnr), np.std(test_psnr)))
+        print(" base SSIM:\t\t{:.6f}, std: {:.6f}".format(np.mean(base_ssim), np.std(base_ssim)))
+        print(" test SSIM:\t\t{:.6f}, std: {:.6f}".format(np.mean(test_ssim), np.std(test_ssim)))
+        print(" base NRMSE:\t\t{:.6f}, std: {:.6f}".format(np.mean(base_nrmse), np.std(base_nrmse)))
+        print(" test NRMSE:\t\t{:.6f}, std: {:.6f}".format(np.mean(test_nrmse), np.std(test_nrmse)))
 
     def _train_cnn(self, loader_train):
         self.net.train()
@@ -210,7 +201,7 @@ class Solver():
             im_A, im_A_und, k_A_und, mask = data_dict['im_A'].float().cuda(), data_dict[
                 'im_A_und'].float().cuda(), data_dict['k_A_und'].float().cuda(), data_dict['mask_A'].float().cuda()
             if self.model_name == 'ista-net-plus':
-                T1,loss_layers_sym = self.net(im_A_und, k_A_und, mask)
+                T1, loss_layers_sym = self.net(im_A_und, k_A_und, mask)
             else:
                 T1 = self.net(im_A_und, k_A_und, mask)
 
@@ -221,7 +212,7 @@ class Solver():
             loss_g = self.criterion(T1, im_A, data_range=im_A.max())
             if self.model_name == 'ista-net-plus':
                 loss_constraint = torch.mean(torch.pow(loss_layers_sym[0], 2))
-                for k in range(len(loss_layers_sym)-1):
+                for k in range(len(loss_layers_sym) - 1):
                     loss_constraint += torch.mean(torch.pow(loss_layers_sym[k + 1], 2))
                 loss_g = loss_g + 0.01 * loss_constraint
 
@@ -263,10 +254,7 @@ class Solver():
                 im_A, im_A_und, k_A_und, mask = data_dict['im_A'].float().cuda(), data_dict[
                     'im_A_und'].float().cuda(), data_dict['k_A_und'].float().cuda(), data_dict[
                                                     'mask_A'].float().cuda()
-                if self.model_name == 'ista-net-plus':
-                    T1,_ = self.net(im_A_und, k_A_und, mask)
-                else:
-                    T1 = self.net(im_A_und, k_A_und, mask)
+                T1 = self.net(im_A_und, k_A_und, mask)
                 ############## convert model ouput to complex value in original range
                 T1 = output2complex(T1)
                 im_A = output2complex(im_A)

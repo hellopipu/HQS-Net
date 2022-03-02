@@ -43,7 +43,6 @@ class MyData(Dataset):
         '''
 
         :param img_A: numpy array, (2,H,W)
-        :param use_transform:
         :return: torch tensor, complex, (H,W)
         '''
 
@@ -61,8 +60,9 @@ class MyData(Dataset):
     def get_sample(self, index, mask):
 
         image_A = self.images[index]
-        image_A_abs = (image_A[0]**2 + image_A[1]**2)**0.5
-        image_A = image_A/np.percentile(image_A_abs, 99)
+        ## data norm
+        image_A_abs = (image_A[0] ** 2 + image_A[1] ** 2) ** 0.5
+        image_A = image_A / np.percentile(image_A_abs, 99)
         ########################### image preprocessing ##########################
         # transform
         image_A = self.transform(image_A)

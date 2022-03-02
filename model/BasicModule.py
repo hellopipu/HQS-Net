@@ -20,8 +20,6 @@ def conv_block(model_name='hqs-net', channel_in=22, n_convs=3, n_filters=32):
     layers = []
     if model_name == 'dc-cnn':
         channel_out = channel_in
-    if model_name == 'ista-net':
-        channel_out = n_filters
     elif model_name == 'prim-net' or model_name == 'hqs-net':
         channel_out = channel_in - 2
     elif model_name == 'dual-net':
@@ -320,14 +318,3 @@ class UNetRes(nn.Module):
         x = self.m_tail(x + x1)
 
         return x
-
-
-if __name__ == '__main__':
-    x = torch.rand(1, 22, 256, 256)
-    net = UNetRes(in_nc=22, out_nc=20, nc=[64, 128, 256, 512], nb=4, act_mode='R', downsample_mode="strideconv",
-                  upsample_mode="convtranspose")
-    net.eval()
-    with torch.no_grad():
-        y = net(x)
-    print(y.shape)
-    print('    Total params: %.5fMB' % (sum(p.numel() for p in net.parameters()) / (1024.0 * 1024)))

@@ -19,7 +19,8 @@ if __name__ == '__main__':
     ############################### experiment settings ##########################
     parser.add_argument('--mode', default='train', choices=['train', 'test'],
                         help='mode for the program')
-    parser.add_argument('--model', default='hqs-net', choices=['dc-cnn', 'lpd-net', 'hqs-net', 'hqs-net-unet','ista-net-plus'],
+    parser.add_argument('--model', default='hqs-net',
+                        choices=['dc-cnn', 'lpd-net', 'hqs-net', 'hqs-net-unet', 'ista-net-plus'],
                         help='models to reconstruct')
     parser.add_argument('--acc', type=int, default=5,
                         help='Acceleration factor for k-space sampling')
@@ -41,6 +42,8 @@ if __name__ == '__main__':
                         help='batch size, 1,4,8,16, ...')
     parser.add_argument('--lr', type=float, default=1e-3,
                         help='learning rate for training')
+    parser.add_argument('--resume', type=int, default=0, choices=[0, 1],
+                        help='resume training')
 
     args = parser.parse_args()
 

@@ -104,7 +104,9 @@ def pad_crop(arr, d_shape, mode='constant', value=0):
 
 def undersample(image, mask, norm='ortho'):
     assert image.shape == mask.shape
-
+    # the standard way to get k-space from image
+    # should be like fftshift(fft2(ifftshift(img,dim=(-1,-2)),norm=norm),dim=(-1,-2)),
+    # we omit fftshift/ifftshift for simplicity, and now k is uncentered. so we also use uncentered mask
     k = fft2(image, norm=norm)
     k_und = mask * k
     x_und = ifft2(k_und, norm=norm)
@@ -139,16 +141,18 @@ def cartesian_mask(shape: object, acc: object, centred: object = False,
 
     shape: tuple - of form (..., nx, ny)
     acc: float - doesn't have to be integer 4, 8, etc..
-    sample_n: num of lines in low frequency to be sampled
-
+    centered : if False, return uncentered mask
+    sample_random: if True, generate random mask
     """
     shape = shape[:-2] + (shape[-1], shape[-2])
+    # now acc only support 5 or 10, you can modify it yourself
     if acc == 5:
         center_fraction = 0.08
     elif acc == 10:
         center_fraction = 0.04
 
     N, Nx, Ny = int(np.prod(shape[:-2])), shape[-2], shape[-1]
+    # sample_n: num of lines in low frequency to be sampled
     sample_n = int(round(Nx * center_fraction))
     pdf_x = normal_pdf(Nx, 0.5 / (Nx / 10.) ** 2)
     lmda = Nx / (2. * acc)

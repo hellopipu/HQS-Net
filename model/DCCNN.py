@@ -40,6 +40,7 @@ class DCCNN(nn.Module):
         x_out = torch.view_as_real(torch.fft.ifft2(k_out, norm=self.norm))
         x_out = x_out.permute(0, 3, 1, 2)
         return x_out
+
     def _forward_operation(self, img, mask):
 
         k = torch.fft.fft2(torch.view_as_complex(img.permute(0, 2, 3, 1).contiguous()),
@@ -67,13 +68,3 @@ class DCCNN(nn.Module):
             x = x + x_cnn
             x = self.update_opration(x, k, m)
         return x
-
-
-if __name__ == '__main__':
-    net = DCCNN()  #
-    im_un = torch.zeros((1, 2, 64, 64))
-    k_un = torch.zeros((1, 2, 64, 64))
-    mask = torch.zeros((1, 2, 64, 64))
-    with torch.no_grad():
-        y = net(im_un, k_un, mask)
-    print('Total # of params: %.5fM' % (sum(p.numel() for p in net.parameters()) / (1024.0 * 1024)))
