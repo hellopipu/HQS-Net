@@ -6,3 +6,4 @@ scipy
 torchvision
 torch >= 1.10
 tensorboardX
+fvcore
