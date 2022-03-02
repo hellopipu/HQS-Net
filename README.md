@@ -3,7 +3,7 @@
 ## HQS-Net
 
 pytorch implementation of the paper **Learned Half-Quadratic Splitting Network for Magnetic Resonance Image
-Reconstruction** (https://arxiv.org/abs/2112.09760)
+Reconstruction** (https://openreview.net/pdf?id=h7rXUbALijU)
 
 ### Install
 
