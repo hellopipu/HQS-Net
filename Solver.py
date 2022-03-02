@@ -148,7 +148,7 @@ class Solver():
         dataset_val = MyData(self.imageDir_test, self.acc, self.img_size, is_training='test')
 
         loader_val = Data.DataLoader(dataset_val, batch_size=self.batch_size, shuffle=False, drop_last=False,
-                                     num_workers=4, pin_memory=True)
+                                     num_workers=2, pin_memory=True)
         len_data = len(dataset_val)
         print("slices of 2d test data: ", len_data)
         checkpoint = torch.load(self.model_path)
