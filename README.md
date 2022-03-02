@@ -1,3 +1,4 @@
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/gist/hellopipu/9c5683aa969920c03b5b2690e9880311/demo_hqsnet_single_coil_cardiac_mr_reconstruction.ipynb)
 ## HQS-Net
 pytorch implementation of the paper **Learned Half-Quadratic Splitting Network for Magnetic Resonance Image Reconstruction** (https://arxiv.org/abs/2112.09760)
 
