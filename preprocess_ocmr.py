@@ -44,8 +44,8 @@ def get_data(path_dir, csv_file, scn):
         dim_kData = kData.shape
         CH = dim_kData[3]
 
-        ## Average the k-sapce along phase(time) dimension
-        kData_tmp = np.mean(kData, axis=8);  # average the k-space if average > 1
+        ## average the k-space if average > 1
+        kData_tmp = np.mean(kData, axis=8);  
 
         ## Coil images are combined using SOS (sum of square.)
         im_coil = fftshift(ifft2(ifftshift(kData_tmp, (0, 1)), axes=(0, 1), norm='ortho'), (0, 1))  # IFFT (2D image)
